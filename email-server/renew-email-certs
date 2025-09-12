@@ -1,0 +1,55 @@
+#!/bin/bash
+#
+# Renew mail server TLS certs
+#
+# This script should be run from cron once a week
+# Run it at a random time (not midnight on Sunday, for example) to avoid overloading the
+# Let's Encrypt servers. For example, a crontab entry of "15 4 * * 4" runs it every
+# Thursday at 4:15 am.
+
+# User must have root
+if [[ $EUID -ne 0 ]]; then
+    echo "You must be a privileged user to run this command.  Did you forget to sudo?"
+    exit 1
+fi
+
+# Load setting needed for obtaining certs
+source /root/.emailconfig
+
+# Lego doesn't offer a "renew everything that needs it" option like certbot does, so we'll
+# loop throough all of the certs and attempt to renew them individually.  Rather than use
+# the renew-hook option to restart the servers each time a renewal is completed, we'll
+# keep track of whether any certs were renewed and restart everything once when everyting
+# is complete.
+#
+# Hat tip to "beppler" for suggestion on https://github.com/go-acme/lego/issues/882
+
+#Don't restart by default
+RESTART=0
+
+for DOMAIN in `lego --path /etc/chasquid/.lego list | grep 'Certificate Name:' | awk '{print $3}'`; do
+    # Since Lego doesn't provide any parsable indication to renewal status
+    # we'll look at certificate file time stamps; if they change, assume the cert was renewed
+
+    # Get last modified time before renewal attempt
+    ORIGTS=`date -r /etc/chasquid/.lego/certificates/$DOMAIN.crt`
+
+    # Renew the cert (by default it will only happen if expiry < 30 days)
+    lego --dns pdns --accept-tos --email $TLS_EMAIL --path /etc/chasquid/.lego -d $DOMAIN renew
+
+    # Get the new modified time; if different from ORIGTS cert was renewed
+    NEWTS=`date -r /etc/chasquid/.lego/certificates/$DOMAIN.crt`
+
+    if [[ "$ORIGTS" != "$NEWTS" ]]; then
+        # Time stamps are different, restart is needed
+        RESTART=1
+    fi
+done
+
+if [[ $RESTART -eq 1 ]]; then
+    # At least one certificate was renewed
+
+    # Restart services (note chasquid doesn't have a "reload" option; hard restart is required)
+    systemctl restart chasquid
+    systemctl reload dovecot
+fi

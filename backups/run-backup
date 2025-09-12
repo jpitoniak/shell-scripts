@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# get the backup server address and passphrase from ~/.borg
+source ~/.borg
+
+TIMESTAMP=`date +"%Y-%m-%d-%H%M"`
+HOST=`hostname -s`
+
+export BORG_PASSPHRASE
+borg create --compression zstd,5 --stats borg@$BACKUP_SERVER:$HOST::$TIMESTAMP \
+    / -e /dev -e /media -e /mnt -e /proc -e /run -e /sys

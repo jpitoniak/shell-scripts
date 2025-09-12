@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# User must have root
+if [[ $EUID -ne 0 ]]; then
+    echo "You must be a privileged user to run this command.  Did you forget to sudo?"
+    exit 1
+fi
+
+# Check for required command line argument
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 domain.tld"
+    exit 2
+fi
+
+# Load setting needed for obtaining certs
+source /root/.emailconfig
+
+# Create the directories and files needed by chasquid
+mkdir /etc/chasquid/{domains,certs}/$1
+touch /etc/chasquid/domains/$1/{aliases,passwd,users}
+chown chasquid:chasquid /etc/chasquid/domains/$1
+chown chasquid:chasquid /etc/chasquid/domains/$1/{aliases,users}
+chown dovecot:dovecot /etc/chasquid/domains/$1/passwd
+chmod 660 /etc/chasquid/domains/$1/*
+
+# Create a DKIM selector using the server's short hostname and today's date
+printf -v DATE '%(%Y%m%d)T' -1
+HOST=`hostname -s`
+echo $HOST$DATE >/etc/chasquid/domains/$1/dkim_selector
+
+# Generate DKIM keys
+WD=`pwd`
+cd /etc/chasquid/certs/$1
+dkimkeygen
+mv private.pem dkim_privkey.pem
+chown chasquid:chasquid dkim_privkey.pem
+echo "Remember to create a $HOST$DATE._domainkey record in DNS with the following value:"
+cat dns.txt
+cd $WD
+
+# Make sure chasquid has access to the TLS cert we're about to create
+mkdir -p /etc/chasquid/.lego/certificates
+chmod 755 /etc/chasquid/.lego /etc/chasquid/.lego/certificates
+
+# Generate the TLS certificate for this domain
+lego --dns pdns --accept-tos --email $TLS_EMAIL --path /etc/chasquid/.lego -d mail.$1 run
+chown root:chasquid /etc/chasquid/.lego/certificates/mail.$1.{crt,issuer.crt,json,key}
+chmod 644 /etc/chasquid/.lego/certificates/mail.$1.{crt,issuer.crt}
+chmod 640 /etc/chasquid/.lego/certificates/mail.$1.key
+
+# LInk the certificates to paths chasquid expects
+ln -s /etc/chasquid/.lego/certificates/mail.$1.crt /etc/chasquid/certs/$1/fullchain.pem
+ln -s /etc/chasquid/.lego/certificates/mail.$1.key /etc/chasquid/certs/$1/privkey.pem
+
+# Add domain's TLS cert to Dovecot
+cat <<EOF | tee /etc/dovecot/domains/mail.$1.conf
+local_name mail.$1 {
+    ssl_cert = </etc/chasquid/certs/$1/fullchain.pem
+    ssl_key = </etc/chasquid/certs/$1/privkey.pem
+}
+EOF
+
+# Restart services (note chasquid doesn't have a "reload" option; hard restart is required
+systemctl restart chasquid
+systemctl reload dovecot
+echo "Domain $1 has been configured for email."

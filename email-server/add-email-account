@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# User must have root
+if [[ $EUID -ne 0 ]]; then
+    echo "You must be a privileged user to run this command.  Did you forget to sudo?"
+    exit 1
+fi
+
+# Check for required command line argument
+if [[ "$#" -lt 1 ]]; then
+    echo "Usage: $0 user@domain.tld"
+    exit 2
+fi
+
+# Split user and domain parts of email address
+PARTS=(`echo $1 | tr "@" "\n"`)
+USER=${PARTS[0]}
+DOMAIN=${PARTS[1]}
+
+# Check that the domain is configured for mail
+if [[ ! -d /etc/chasquid/domains/$DOMAIN ]]; then
+    echo "The $DOMAIN domain is not configured on this server."
+    exit 3
+fi
+
+# Check that the user doesn't already exist in the passwd file for the domain
+grep -qs "^$1:" /etc/chasquid/domains/$DOMAIN/passwd
+if [[ $? -eq 0 ]]; then
+	echo "The user $USER already exists for $DOMAIN."
+	exit 4
+fi
+
+# Prompt for a password
+PASSWD=`doveadm pw`
+
+# Write the username (as full email address) and hashed password to the domain's passwd file
+echo "$1:$PASSWD:dovenull:dovenull:::::" >>/etc/chasquid/domains/$DOMAIN/passwd
+
+echo "Email account created for $1."
