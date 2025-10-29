@@ -6,6 +6,27 @@ source ~/.borg
 TIMESTAMP=`date +"%Y-%m-%d-%H%M"`
 HOST=`hostname -s`
 
+# if there is a MariaDB server running on the host, dump all of the database to file so that they get backed up in a safe state
+systemctl status mariadb.service >/dev/null 2>&1
+if [[ $? -eq 0 ]]; then
+    # make sure the backup directory exists and isn't accessible to anyone
+    mkdir -p /var/mariadb_backups
+    chown 770 /var/mariadb_backups
+
+    # get the list of databases
+    DATABASES=$(mysql -BNe "show databases;" | grep -Ev "mysql|information_schema|performance_schema|sys")
+    for DB in "${DATABASES[@]}"; do
+
+    # Keep the two previous backups along with the newest, delete the oldest if there are two newer ones
+        [[ -f /var/mariadb_backups/$DB.3.sql.gz ]] && rm /var/mariadb_backups/$DB.3.sql.gz
+        [[ -f /var/mariadb_backups/$DB.2.sql.gz ]] && mv /var/mariadb_backups/$DB.2.sql.gz /var/mysql_backups/$DB.3.sql.gz
+        [[ -f /var/mariadb_backups/$DB.sql.gz ]] && mv /var/mariadb_backups/$DB.sql.gz /var/mysql_backups/$DB.2.sql.gz
+
+    # dump the database and compress it
+        mysqldump -d $DB | gzip -c >/var/mariadb_backups/$DB.sql.gz
+    done
+fi
+
 export BORG_PASSPHRASE
 borg create --compression zstd,5 --stats borg@$BACKUP_SERVER:$HOST::$TIMESTAMP \
     / -e /dev -e /media -e /mnt -e /proc -e /run -e /sys

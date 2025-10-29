@@ -2,6 +2,8 @@
 
 I use this script to do nightly backups to a backup server on my home network using [Borg Backup](https://borgbackup.org) over SSH.  Borg does incremental backups of a system and stores them in an encrypted git-like repository.
 
+If the host has a MariaDB database server running on it, the script will attempt to export of all of the server's databases prior to running the backup, saving them to `/var/mariadb_backups`.  Each database (schema) will be exported to a separate file.  The three most recent backup files will be retained, and older ones will be automatically removed.  These files will then be included in the system backup.
+
 ## What you'll need
 
 - A backup server, accessible via SSH
@@ -46,7 +48,7 @@ MAILTO=you@yourdomain.com
 ```
 
 - The MAILTO line is optional.  If present and your machine has a working `sendmail` program, you'll get a summary report mailed to you after the backup completes.
-- The second line schedules that backups to begin daily at quarter past midnight.  I stagger the starting times across my different machines so as to not overwhelm my backup server with a bunch of connections all at once.
+- The second line schedules the backups to begin daily at quarter past midnight.  I stagger the starting times across my different machines so as to not overwhelm my backup server with a bunch of connections all at once.
 
 
 ## On the backup server (machine receiving the backup)
@@ -60,7 +62,7 @@ MAILTO=you@yourdomain.com
 sudo su - borg
 cd /home/borg/backups
 borg init --encryption=repokey ./MACHINE_NAME
-vi /home/borg/.ssh/authorized_keys
+vi ~/.ssh/authorized_keys
 ```
 
 For the `authorized_keys` file, first open the /root/.ssh/id_ed25519.pub file on the machine being backed up and copy the contents.  Then enter the following, adding the contents to the end of the line:
@@ -73,4 +75,4 @@ command="borg serve --restrict-to-path /external/borg-backup/MACHINE\_NAME",rest
 
 To start a backup, simply run `/root/bin/run-backup` from the command line.  If everything is set up correctly, the backup should start.
 
-Depending on the size of your system, the first backup could take a long time.  I running it over SSH, recommend using a tool like `screen` to keep things running in the event that your SSH session gets disconnected before the backup finishes.
+Depending on the size of your system, the first backup could take a long time.  If running it over SSH, recommend using a tool like `screen` to keep things running in the event that your SSH session gets disconnected before the backup finishes.
