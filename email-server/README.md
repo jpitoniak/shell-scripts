@@ -5,7 +5,8 @@ This directory contains some utility scripts I use to maintain my email server. 
 These scripts are based off the setup I outline on my blog at the links below.  They assume a working installation of both Chasquid and Dovecot, following the instructions outlined in the first post.  [Lego](https://go-acme.github.io/lego/) is also required for obtaining TLS certificates using the [PowerDNS API](https://doc.powerdns.com/authoritative/http-api/index.html).
 
 - [Setting Up a Mail Server with Chasquid and Dovecot – Part 1 The Servers](https://www.kodiakskorner.com/log/466)
-- To Be Released
+- [Setting Up a Mail Server with Chasquid and Dovecot – Part 2: Domains and Accounts](https://www.kodiakskorner.com/log/471)
+- [Setting Up a Mail Server with Chasquid and Dovecot – Part 3: Final Loose Ends](https://www.kodiakskorner.com/log/475)
 
 These scripts expect a config file, named `.emailconfig` to be located in the 'root' user's home directory (`/root`).  This file should contain the following:
 
